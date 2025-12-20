@@ -1,4 +1,43 @@
 # PoolMaster - No-Code Quick Start
+**60 seconds. No programming.**
+## 🕷️ What You'll Build
+- Auto-spawning objects  
+- Auto-returning to pool  
+- Zero garbage collection
+## ⚒️ Step 1: Add Manager (10 sec)
+## 🌑 Step 2: Create Pool (15 sec)
+## 🔥 Step 3: Auto-Spawn (20 sec)
+## 🧪 Step 4: Auto-Return (15 sec)
+## 🎮 Press Play
+**Optional cleanup:**
+- Stop Particles On Return — Stops VFX
+- Reset Rigidbody On Return — Stops physics
+## 🗡️ Common Uses
+## 🧱 Key Settings Explained
+## 🛡️ Troubleshooting
+### Nothing spawns
+1. Prefab assigned in pool AND spawner?
+2. PoolMaster Manager in scene?
+3. Prewarm Amount > 0 OR "On Exhausted" = Expand?
+### Objects spawn but never return
+1. Return To Pool on PREFAB (not spawned copy)?
+2. Return Condition set?
+3. Lifetime Seconds > 0 if using After Time?
+### Bad performance
+1. Increase Prewarm Amount
+2. Enable "Prewarm On Start"
+3. Don't set Max Size too low
+### Wrong spawn location
+1. Check Position Mode
+2. Check Spawn Offset values
+3. Prefab transform at (0,0,0)?
+## 🧭 Pro Tips
+- Add Return To Pool to **prefab once**, not every copy  
+- Use "On Key Press" (Space) for easy testing  
+- Enable "Show Debug Info" to see what's happening  
+- Select Spawner to see green spawn area in Scene view  
+- Create "Pooled Prefabs" folder for organization
+# PoolMaster - No-Code Quick Start
 
 **60 seconds. No programming.**
 
