@@ -536,6 +536,12 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 Created by Max Thomas Coates
 
+## 🦾 Contributing
+
+- Enable repo hooks: `git config core.hooksPath .githooks`
+- Verify CSharpier: `csharpier --version` (required for formatting)
+- Format manually if needed: `csharpier format .`
+
 ## 🐛 Support
 
 - **Issues**: [GitHub Issues](https://github.com/yourusername/PoolMaster/issues)
