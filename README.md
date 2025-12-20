@@ -9,7 +9,7 @@
 
 ### 🛠️ Getting Started
 
-For the fastest setup, start with the No‑Code Quick Start: [Documentation/NO_CODE_QUICK_START.md](Documentation/NO_CODE_QUICK_START.md)
+For the fastest setup, start with the No‑Code Quick Start: [Documentation/no-code-quick-start.md](Documentation/no-code-quick-start.md)
 
 ---
 
@@ -74,7 +74,7 @@ Perfect for beginners or rapid prototyping. Zero programming required.
 
 **Press Play** - Objects spawn, live 2 seconds, return to pool automatically.
 
-> **Full no-code guide:** See [NO_CODE_QUICK_START.md](Documentation/NO_CODE_QUICK_START.md)
+> **Full no-code guide:** See [Documentation/no-code-quick-start.md](Documentation/no-code-quick-start.md)
 
 ---
 
