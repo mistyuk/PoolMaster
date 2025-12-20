@@ -7,30 +7,30 @@
 
 ---
 
-### ⚡ Getting Started
+### 🛠️ Getting Started
 
 For the fastest setup, start with the No‑Code Quick Start: [Documentation/NO_CODE_QUICK_START.md](Documentation/NO_CODE_QUICK_START.md)
 
 ---
 
-## 💎 Features
+## ♠️ Features
 
-- 🖤 Zero-allocation pooling — minimal GC, fast hot paths
-- ⛓️ Type-safe API — generic Pool<T> with safety
-- 💎 Batch ops — spawn/despawn many at once
-- 🖤 Command buffers — thread-safe enqueue, main-thread flush
-- ⛓️ Diagnostics — real-time metrics + editor window
-- 💎 Configurable — precise control over pool behavior
-- 🖤 Events — decoupled, opt-in hooks
-- ⛓️ Collection pooling — reuse lists/dicts/sets
-- 💎 Easy integration — IPoolable + helpers
+- Zero-allocation pooling — minimal GC, fast hot paths
+- Type-safe API — generic Pool<T> with safety
+- Batch ops — spawn/despawn many at once
+- Command buffers — thread-safe enqueue, main-thread flush
+- Diagnostics — real-time metrics + editor window
+- Configurable — precise control over pool behavior
+- Events — decoupled, opt-in hooks
+- Collection pooling — reuse lists/dicts/sets
+- Easy integration — IPoolable + helpers
 
-## 🖤 Compatibility
+## 🕶️ Compatibility
 
 - Supported Unity: 6.0 – 6.4 (stable)
 - Render Pipelines: Built-in, URP, HDRP
 
-## 🖤 Links
+## 🔗 Links
 
 - Add me on Discord: [misty2023](https://discord.com/users/misty2023)
 
@@ -160,7 +160,7 @@ public class Bullet : MonoBehaviour, IPoolable
 
 ---
 
-## 📚 API Reference
+## 🧩 API Reference
 
 ### Core Classes
 
@@ -310,7 +310,7 @@ Performance comparison vs traditional `Instantiate/Destroy`:
 
 *Benchmarks run on Unity 2022.3 LTS, Intel i7-12700K, 32GB RAM*
 
-## 🎓 Advanced Usage
+## 🛰️ Advanced Usage
 
 ### Command Buffer System
 

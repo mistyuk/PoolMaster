@@ -1,10 +1,7 @@
 # Documentation
 
 ## Index
-- 💎 No-Code Quick Start: NO_CODE_QUICK_START.md
-- 🖤 Examples Guide: Examples/DEMO_README.md
-- ⛓️ Demo Setup Notes: Examples/DEMO_SETUP_COMPLETE.md
-- 💎 Testing Guide: Tests/README.md
+- No-Code Quick Start: NO_CODE_QUICK_START.md
 
 ## Compatibility
 - Unity 6.0 – 6.4 (stable)
