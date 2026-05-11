@@ -54,7 +54,12 @@ namespace PoolMaster.NoCode
             {
                 if (instance == null)
                 {
+#if UNITY_2023_1_OR_NEWER
+                    // Unity 6: FindObjectOfType is deprecated
+                    instance = Object.FindFirstObjectByType<PoolMasterManager>();
+#else
                     instance = FindObjectOfType<PoolMasterManager>();
+#endif
                     if (instance == null)
                     {
                         var go = new GameObject("PoolMaster Manager");

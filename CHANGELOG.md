@@ -5,6 +5,121 @@ All notable changes to PoolMaster will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2] - 2026-05-11
+
+### Stability & Unity 6 compatibility
+
+This release rolls up bug fixes, Unity 6 API updates, and a major feature (non-`IPoolable`
+prefab support) battle-tested in a production project. The previous main branch had two
+compilation errors that prevented clean adoption on Unity 6 — both are now resolved.
+
+#### Added
+- **`GameObjectPool`** — Non-generic pool that pools any prefab, even without an `IPoolable`
+  component. `PoolingManager.Spawn`, `TryBootstrapPool`, and `AddPreset` now fall back to
+  this when the prefab has no `IPoolable` (previously this was a logged error and `null`
+  return). New public API: `PoolingManager.GetOrCreateGameObjectPool(prefab, request)`.
+- **`GameObjectPool.PrewarmSpread(count, frameBudgetMs)`** — Prewarms across multiple frames
+  within a per-frame time budget for hitching-free runtime expansion.
+- **`IPoolControl.Reseed(bool rePrewarm = true)`** — Flushes and rebuilds a pool. Force-despawns
+  every active instance via PooledMarker scan, destroys all inactive instances, then optionally
+  re-prewarms to the original `initialPoolSize`. Use after editing the source prefab at runtime
+  so existing pooled clones get replaced with fresh ones on the next Spawn — no more game
+  restarts to pick up prefab edits.
+- **Diagnostics window — per-pool controls** — Clear Inactive / Shrink to 4 / **Reseed** /
+  Destroy (with confirmation) buttons on every pool entry. Global toolbar gains Clear All
+  Inactive and Cull Unused (60s) actions.
+
+#### Fixed
+- **Pool.cs** — Removed reference to undeclared `componentCache` field in `ShrinkInactive`
+  that prevented the package from compiling on a fresh import.
+- **Tests** — `PoolMetricsTests` and `PoolSnapshotTests` were calling the `PoolMetrics`
+  constructor with 9 arguments when it expects 10 (`lastActivityTime` was missing).
+- **Pool.cs / GameObjectPool.cs** — Underflow guard on `activeCount`. Double-despawn or
+  external destroys no longer drive the counter negative.
+- **GameObjectPool.Despawn** — Reject double-despawn early. Without this the same instance
+  could be pushed onto `inactivePool` twice and handed out by subsequent `Spawn()` calls.
+- **Pool.cs** — `Object.Destroy` instead of `DestroyImmediate` during Play Mode (the editor
+  branch was firing in Play Mode too, which can corrupt the inactive stack).
+- **PoolableMonoBehaviour subclasses** — `SimplePoolableObject.OnSpawned/OnDespawned` now
+  call `base.OnSpawned()`/`base.OnDespawned()` so base-class lifecycle runs.
+- **PoolMasterReturnToPool** — `Rigidbody.velocity` → `linearVelocity` for Unity 6
+  (`velocity` was renamed and is obsolete in Unity 2023.3+).
+- **PoolMasterManager** — `FindObjectOfType` → `FindFirstObjectByType` behind a
+  `#if UNITY_2023_1_OR_NEWER` guard.
+
+#### Hardened
+- **PoolingManager singleton** — `_destroyed` flag prevents resurrection during
+  `OnApplicationQuit`; `Instance` refuses to auto-create in non-Play mode; a
+  `[RuntimeInitializeOnLoadMethod(SubsystemRegistration)]` resets statics on domain reload
+  so Enter Play Mode without Domain Reload works correctly.
+- **GameObjectPool ctor** — Null-guards `PoolingManager.Instance` before `StartCoroutine`
+  on the `NextFrame` prewarm path; falls back to immediate prewarm if the manager has
+  already shut down.
+- **PoolingManager.AddPreset** — Now validates with `PoolRequest.IsValid()` and dedups
+  against both live pools and the pending presets list.
+- **PoolingManager.GetAllPoolMetrics / GetSnapshot** — Key results by `PoolId` instead of
+  `prefab.name` to avoid collisions when two prefabs share a name.
+- **PoolingManager.CullUnusedPools** — Uses `CollectionPool.GetList<>()` with `try/finally`
+  instead of `new List<>()` on every call.
+
+#### Internal
+- **PoolingDiagnosticsWindow** — Caches `RichBoldLabel` `GUIStyle` (was allocating one per
+  row per repaint); hex color codes for active/inactive indicators render consistently
+  across editor themes.
+
+#### Examples / Demo
+- **Full rewrite**. Old `Examples/` folder (BasicPoolingDemo, BatchSpawningDemo,
+  CollectionPoolingDemo, CommandBufferDemo, DemoNavigator, DemoSceneSetup, etc.) deleted
+  in favor of a single `DemoBootstrap.cs` plus a minimal `DemoScene.unity`.
+- **No external assets** — camera, light, floor, four pool templates, and the entire
+  UI Toolkit HUD are built programmatically at `Awake`. No prefabs, materials, UXML, or
+  USS to maintain.
+- **Always-compiled** — Examples now has `PoolMaster.Examples.asmdef` and compiles the
+  moment the package is added. The package-level `samples` entry has been removed so
+  there's no manual "Import Sample" step (which would have caused an asmdef name
+  collision with the in-package copy).
+- **Seven live demo modes** in the HUD:
+    - **Basic Spawn** — core `Pool<T>.Spawn`/`Despawn` round-trip
+    - **Batch Spawn** — multi-instance grid spawn with auto-recycle of previous grid
+    - **Projectiles** — continuous 25 Hz fire stream with lifetime-based auto-despawn
+    - **Fireworks** — pooled `ParticleSystem` bursts in 8 different colours via
+      per-spawn `MaterialPropertyBlock` (doesn't break GPU instancing); includes a
+      "Reseed burst pool" button as a Reseed showcase
+    - **GO Pool** — plain cube prefab with NO `IPoolable` component, pooled via
+      `PoolingManager.GetOrCreateGameObjectPool` (the v1.0.2 flagship feature)
+    - **Stress Test** — burst-spawn 500/1000/2000/5000 cubes into the same pool used
+      by Basic Spawn; visceral demonstration that the pool scales linearly with no
+      per-spawn allocation
+    - **Metrics** — live per-pool active/inactive/reuse-efficiency readout plus
+      `CullUnusedPools` / `ClearAllPools` buttons
+- **HUD font** — programmatic `PanelSettings` doesn't auto-link a runtime theme, so
+  Labels/Buttons render blank backgrounds with no text. Bootstrap now assigns the
+  built-in `LegacyRuntime.ttf` to the root via `unityFontDefinition`; UITK cascades it
+  to every descendant. Also assigns an empty `ThemeStyleSheet` to silence the
+  "No Theme Style Sheet set" warning.
+- **GPU warmup** — `WarmupGpuResources` coroutine spawns one instance of each pool
+  below the floor for one frame at game start, forcing the D3D12 backend to allocate
+  vertex/instance buffers up front. Without this, the first particle burst paid a
+  ~60ms `CreateCommittedResourceWithTag` hitch.
+- **Particle render flags** — `ShadowCastingMode.Off` + `receiveShadows = false` +
+  `reflectionProbeUsage = Off` + `lightProbeUsage = Off` on `ParticleSystemRenderer`,
+  and `material.enableInstancing = true`. A ring-of-12 burst (300 particles) is now
+  ~3-5× cheaper than before.
+- **Compact HUD card** — UI Toolkit panel now caps at 960px max-width, centered,
+  with backdrop + border + rounded corners. Sized to content rather than full-screen
+  stretch so the 3D scene below isn't unnecessarily covered.
+- **URP-first with Standard fallback** — uses `Universal Render Pipeline/Lit` for opaque
+  geometry. Particles intentionally use `Sprites/Default` (always available, transparent
+  by default, no shader-keyword juggling required).
+
+#### Asmdef cleanup
+- **Runtime/PoolMaster.asmdef** — Removed unused references to `Unity.Burst`,
+  `Unity.Collections`, `Unity.Jobs`, `Unity.Mathematics`. No source file imported these
+  namespaces, so the references only generated "assembly not found" warnings in projects
+  that didn't have those packages installed.
+
+---
+
 ## [1.0.0] - 2025-12-16
 
 ### 🎉 Initial Release - Production Ready

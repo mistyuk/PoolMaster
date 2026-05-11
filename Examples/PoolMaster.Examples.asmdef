@@ -1,7 +1,9 @@
 {
-    "name": "PoolMaster",
-    "rootNamespace": "PoolMaster",
-    "references": [],
+    "name": "PoolMaster.Examples",
+    "rootNamespace": "PoolMaster.Examples",
+    "references": [
+        "PoolMaster"
+    ],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
@@ -10,9 +12,5 @@
     "autoReferenced": true,
     "defineConstraints": [],
     "versionDefines": [],
-    "noEngineReferences": false,
-    "optionalUnityReferences": [],
-    "internalsVisibleTo": [
-        "PoolMaster.Tests"
-    ]
+    "noEngineReferences": false
 }

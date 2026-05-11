@@ -7,13 +7,13 @@
 
 ---
 
-### Getting Started
+### 🛠️ Getting Started
 
 For the fastest setup, start with the No‑Code Quick Start: [Documentation/no-code-quick-start.md](Documentation/no-code-quick-start.md)
 
 ---
 
-## Features
+## ♠️ Features
 
 - Zero-allocation pooling — minimal GC, fast hot paths
 - Type-safe API — generic Pool<T> with safety
@@ -25,16 +25,16 @@ For the fastest setup, start with the No‑Code Quick Start: [Documentation/no-c
 - Collection pooling — reuse lists/dicts/sets
 - Easy integration — IPoolable + helpers
 
-## Compatibility
+## 🕶️ Compatibility
 
 - Supported Unity: 6.0 – 6.4 (stable)
 - Render Pipelines: Built-in, URP, HDRP
 
-## Links
+## 🔗 Links
 
 - Add me on Discord: [misty2023](https://discord.com/users/misty2023)
 
-## Installation
+## 📦 Installation
 
 ### Option 1: Unity Package Manager (Recommended)
 1. Open Package Manager (`Window > Package Manager`)
@@ -47,7 +47,7 @@ For the fastest setup, start with the No‑Code Quick Start: [Documentation/no-c
 
 ---
 
-## Quick Start
+## 🚀 Quick Start
 
 **Choose your path:** No code setup or full API control.
 
@@ -160,7 +160,7 @@ public class Bullet : MonoBehaviour, IPoolable
 
 ---
 
-## API Reference
+## 🧩 API Reference
 
 ### Core Classes
 
@@ -239,6 +239,57 @@ var request = new PoolRequest
 };
 ```
 
+### 🆕 Added in 1.0.2
+
+#### GameObjectPool — pool *any* prefab, no `IPoolable` required
+Non-generic pool implementation. Use when the prefab is plain geometry / particles
+without a pooling component.
+
+```csharp
+// Plain prefab — no PoolableMonoBehaviour, no IPoolable, no scripts.
+var request = PoolRequest.Create(plainPrefab, initialSize: 10);
+IPool pool = PoolingManager.Instance.GetOrCreateGameObjectPool(plainPrefab, request);
+
+// Same API as Pool<T> from the consumer side
+GameObject obj = pool.Spawn(position, rotation, parent);
+obj.ReturnToPool();
+```
+
+`PoolingManager.Spawn(prefab, …)` automatically falls back to a `GameObjectPool`
+when the prefab has no `IPoolable` — previously this was a logged error. If the
+prefab *does* implement `IPoolable`, `GetOrCreateGameObjectPool` routes to the
+type-safe `Pool<T>` path so behavior stays consistent.
+
+#### IPoolControl.Reseed — flush after editing prefabs at runtime
+Force-despawns every active instance, destroys all inactive instances, then
+optionally re-prewarms to the original `initialPoolSize`. Use after modifying
+the source prefab at runtime so existing pooled clones get replaced with fresh
+ones on the next `Spawn`.
+
+```csharp
+// Flush + re-prewarm to initialPoolSize
+pool.Reseed(rePrewarm: true);
+
+// Flush only — next Spawn will lazily instantiate from the updated prefab
+pool.Reseed(rePrewarm: false);
+```
+
+Also surfaced as a per-pool button in **Window → PoolMaster → Diagnostics**.
+
+#### Diagnostics window — bulk and per-pool controls
+- Global: **Clear All Inactive**, **Cull Unused (60s)**
+- Per pool: **Clear Inactive**, **Shrink to 4**, **Reseed**, **Destroy**
+
+#### Hardening
+- Singleton resurrection during `OnApplicationQuit` blocked; `Instance` returns
+  `null` instead of auto-creating in non-Play mode.
+- `[RuntimeInitializeOnLoadMethod(SubsystemRegistration)]` resets statics on
+  domain reload — Enter Play Mode without Domain Reload now works correctly.
+- `PoolingManager.AddPreset` validates with `PoolRequest.IsValid()` and dedups
+  against both live pools and pending presets.
+- `PoolingManager.GetAllPoolMetrics` / `GetSnapshot` key results by `PoolId`
+  instead of `prefab.name` — avoids collisions when two prefabs share a name.
+
 #### CollectionPool
 Static utility for pooling collections.
 
@@ -287,7 +338,7 @@ PoolingEvents.OnPoolExpanded += (poolId, newCapacity) => {};
 PoolingEvents.OnPoolCulled += (poolId, objectsDestroyed) => {};
 ```
 
-## Performance Benchmarks
+## ⚡ Performance Benchmarks
 
 Performance comparison vs traditional `Instantiate/Destroy`:
 
@@ -425,7 +476,7 @@ PoolMaster uses assembly definitions for clean separation:
 
 To reference PoolMaster in your code, add `PoolMaster` to your assembly definition references.
 
-## Migration Guide
+## 📖 Migration Guide
 
 ### From Unity's Built-in ObjectPool
 
@@ -497,7 +548,7 @@ var obj = PoolingManager.Instance.Spawn(prefab, position, rotation);
 obj.ReturnToPool(); // Extension method
 ```
 
-## Best Practices
+## 🤝 Best Practices
 
 1. **Always implement IPoolable** - Even if empty, it ensures proper lifecycle hooks
 2. **Use PoolableMonoBehaviour** - Handles common cleanup patterns automatically
@@ -508,7 +559,7 @@ obj.ReturnToPool(); // Extension method
 7. **Profile your pools** - Use the diagnostics window to optimize pool sizes
 8. **Disable logs in production** - Remove `ENABLE_POOL_LOGS` for zero logging overhead
 
-## FAQ
+## ❓ FAQ
 
 **Q: Can I use PoolMaster with addressables?**  
 A: Yes! Pass the loaded addressable as the prefab parameter.
@@ -528,15 +579,15 @@ A: Core pooling must happen on the main thread, but use `PoolCommandBuffer` for 
 **Q: Does it work with ECS/DOTS?**  
 A: PoolMaster is designed for GameObject-based workflows. For DOTS, use Unity's native entity pooling.
 
-## License
+## 📄 License
 
 MIT License - see [LICENSE](LICENSE) file for details.
 
-## Credits
+## 🙏 Credits
 
-Created by Max Thomas Coates, Misty. 
+Created by Max Thomas Coates
 
-## Contributing
+## 🦾 Contributing
 
 - Enable repo hooks: `git config core.hooksPath .githooks`
 - Verify CSharpier: `csharpier --version` (required for formatting)

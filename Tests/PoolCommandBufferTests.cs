@@ -378,6 +378,8 @@ namespace PoolMaster.Tests
 
         public void DestroyPool() { }
 
+        public void Reseed(bool rePrewarm = true) { }
+
         public bool ContainsObject(GameObject instance) => false;
 
         public void DestroySpawnedObjects()

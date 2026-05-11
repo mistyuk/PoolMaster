@@ -173,14 +173,14 @@ namespace PoolMaster.NoCode
             // Reset rigidbody
             if (resetRigidbodyOnReturn && rb != null)
             {
-                rb.velocity = Vector3.zero;
+                rb.linearVelocity = Vector3.zero;
                 rb.angularVelocity = Vector3.zero;
             }
 
             // Reset rigidbody2D
             if (resetRigidbody2DOnReturn && rb2d != null)
             {
-                rb2d.velocity = Vector2.zero;
+                rb2d.linearVelocity = Vector2.zero;
                 rb2d.angularVelocity = 0f;
             }
 

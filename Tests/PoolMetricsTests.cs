@@ -188,6 +188,7 @@ namespace PoolMaster.Tests
                 cullCount,
                 lastExpandTime,
                 lastCullTime,
+                creationTime,
                 creationTime
             );
         }

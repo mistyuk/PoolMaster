@@ -19,19 +19,27 @@ namespace PoolMaster
         #region Singleton
 
         private static PoolingManager instance;
+        private static bool _destroyed;
 
         /// <summary>
         /// Gets the global instance of the pooling manager. Creates one automatically if none exists.
+        /// Returns null during application quit to prevent resurrection.
         /// </summary>
         public static PoolingManager Instance
         {
             get
             {
-                if (instance == null)
+                if (_destroyed)
+                    return null;
+
+                if (ReferenceEquals(instance, null) || instance == null)
                 {
                     instance = FindFirstObjectByType<PoolingManager>();
                     if (instance == null)
                     {
+                        if (!Application.isPlaying)
+                            return null;
+
                         var go = new GameObject("PoolingManager");
                         instance = go.AddComponent<PoolingManager>();
                         DontDestroyOnLoad(go);
@@ -145,7 +153,23 @@ namespace PoolMaster
             if (instance == this)
             {
                 instance = null;
+                _destroyed = true;
             }
+        }
+
+        private void OnApplicationQuit()
+        {
+            _destroyed = true;
+        }
+
+        /// <summary>
+        /// Resets the destroyed flag. Called automatically on domain reload in editor.
+        /// </summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStatics()
+        {
+            instance = null;
+            _destroyed = false;
         }
 
         #endregion
@@ -224,6 +248,49 @@ namespace PoolMaster
             request.prefab = prefab;
 
             return GetOrCreatePool<T>(request);
+        }
+
+        /// <summary>
+        /// Non-generic pool registration for plain prefabs that do NOT implement <see cref="IPoolable"/>.
+        /// Use this when you want custom <see cref="PoolRequest"/> settings (dynamic expansion,
+        /// hard cap, prewarm count) on a prefab that's just geometry/particles without a pooling
+        /// component. If the prefab implements IPoolable, routes to the generic overload so the
+        /// type-safe Pool&lt;T&gt; path is used instead.
+        /// </summary>
+        /// <param name="prefab">Prefab to pool.</param>
+        /// <param name="request">Pool configuration (expansion, cap, prewarm).</param>
+        /// <returns>Existing or newly-created pool.</returns>
+        public IPool GetOrCreateGameObjectPool(GameObject prefab, PoolRequest request)
+        {
+            if (prefab == null)
+                throw new ArgumentNullException(nameof(prefab));
+
+            if (pools.TryGetValue(prefab, out var existing))
+                return existing;
+
+            request.prefab = prefab;
+
+            // If the prefab happens to implement IPoolable, prefer the generic type-safe path
+            // so behavior matches Spawn()'s auto-creation rules exactly.
+            var poolable = prefab.GetComponent<IPoolable>();
+            if (poolable != null)
+            {
+                var componentType = poolable.GetType();
+                var constructor = GetOrCreateConstructor(componentType);
+                var pool = constructor(request);
+                return pool;
+            }
+
+            var goPool = new GameObjectPool(prefab, request, transform, request.poolId);
+            pools[prefab] = goPool;
+            poolsById[goPool.PoolId] = goPool;
+            createdPools.Add(prefab);
+            commandBuffersById[goPool.PoolId] = new PoolCommandBuffer();
+            PoolingEvents.PublishPoolCreated(goPool.PoolId, prefab);
+            PoolLog.Debug(
+                $"PoolingManager: Created GameObjectPool '{goPool.PoolId}' for prefab '{prefab.name}' (via GetOrCreateGameObjectPool)"
+            );
+            return goPool;
         }
 
         /// <summary>
@@ -415,24 +482,28 @@ namespace PoolMaster
 
             try
             {
-                // Get the IPoolable component to determine the generic type
+                // If prefab doesn't implement IPoolable, create a non-generic pool.
                 var poolable = preset.prefab.GetComponent<IPoolable>();
                 if (poolable == null)
                 {
-                    PoolLog.Error(
-                        $"PoolingManager.TryBootstrapPool: Prefab '{preset.prefab.name}' does not implement IPoolable"
+                    var goPool = new GameObjectPool(preset.prefab, preset, transform, preset.poolId);
+                    pools[preset.prefab] = goPool;
+                    poolsById[goPool.PoolId] = goPool;
+                    createdPools.Add(preset.prefab);
+                    commandBuffersById[goPool.PoolId] = new PoolCommandBuffer();
+                    PoolingEvents.PublishPoolCreated(goPool.PoolId, preset.prefab);
+                    PoolLog.Debug(
+                        $"PoolingManager: Bootstrapped GameObjectPool '{goPool.PoolId}' for prefab '{preset.prefab.name}'"
                     );
-                    return false;
+                    return true;
                 }
 
-                // Use cached constructor delegate to avoid reflection
+                // Otherwise use the generic type-safe pool.
                 var componentType = poolable.GetType();
                 var constructor = GetOrCreateConstructor(componentType);
                 var pool = constructor(preset);
 
-                // Mark as created to prevent duplicates
                 createdPools.Add(preset.prefab);
-
                 PoolLog.Debug(
                     $"PoolingManager: Bootstrapped pool '{pool.PoolId}' for prefab '{preset.prefab.name}'"
                 );
@@ -459,9 +530,33 @@ namespace PoolMaster
                 return;
             }
 
+            // Validate configuration before adding
+            if (!preset.IsValid())
+            {
+                PoolLog.Warn($"PoolingManager.AddPreset: Invalid preset for '{preset.prefab.name}', skipping");
+                return;
+            }
+
             if (presets == null)
             {
                 presets = new List<PoolRequest>();
+            }
+
+            // Dedup: skip if this prefab is already registered as a preset or has a live pool
+            if (createdPools.Contains(preset.prefab) || pools.ContainsKey(preset.prefab))
+            {
+                PoolLog.Debug($"PoolingManager.AddPreset: Pool already exists for '{preset.prefab.name}', skipping");
+                return;
+            }
+
+            // Also check existing presets list to avoid duplicate entries before bootstrap
+            for (int i = 0; i < presets.Count; i++)
+            {
+                if (presets[i].prefab == preset.prefab)
+                {
+                    PoolLog.Debug($"PoolingManager.AddPreset: Preset already registered for '{preset.prefab.name}', skipping");
+                    return;
+                }
             }
 
             presets.Add(preset);
@@ -537,18 +632,27 @@ namespace PoolMaster
 
             // No existing pool - try to create one by detecting component type
             var poolable = prefab.GetComponent<IPoolable>();
-            if (poolable == null)
-            {
-                PoolLog.Error(
-                    $"PoolingManager.Spawn: Prefab '{prefab.name}' does not implement IPoolable"
-                );
-                return null;
-            }
 
             // Create default pool request
             var request = PoolRequest.Create(prefab);
 
-            // Use cached constructor delegate to avoid reflection
+            // If prefab doesn't implement IPoolable, fall back to a non-generic GameObjectPool.
+            // This enables code-based pooling for plain prefabs without requiring components.
+            if (poolable == null)
+            {
+                var goPool = new GameObjectPool(prefab, request, transform, request.poolId);
+                pools[prefab] = goPool;
+                poolsById[goPool.PoolId] = goPool;
+                createdPools.Add(prefab);
+                commandBuffersById[goPool.PoolId] = new PoolCommandBuffer();
+                PoolingEvents.PublishPoolCreated(goPool.PoolId, prefab);
+                PoolLog.Info(
+                    $"PoolingManager: Created GameObjectPool '{goPool.PoolId}' for prefab '{prefab.name}'"
+                );
+                return goPool.Spawn(position, rotation, parent);
+            }
+
+            // Otherwise use the type-safe generic pool.
             var componentType = poolable.GetType();
             var constructor = GetOrCreateConstructor(componentType);
             pool = constructor(request);
@@ -558,9 +662,7 @@ namespace PoolMaster
                 return newPoolControl.Spawn(position, rotation, parent);
             }
 
-            PoolLog.Error(
-                $"PoolingManager.Spawn: Failed to create pool for prefab '{prefab.name}'"
-            );
+            PoolLog.Error($"PoolingManager.Spawn: Failed to create pool for prefab '{prefab.name}'");
             return null;
         }
 
@@ -630,19 +732,18 @@ namespace PoolMaster
         /// <summary>
         /// Get statistics about all managed pools.
         /// </summary>
-        /// <returns>Dictionary of pool statistics by prefab name</returns>
+        /// <returns>Dictionary of pool statistics keyed by PoolId</returns>
         public Dictionary<string, PoolMetrics> GetAllPoolMetrics()
         {
             var metrics = new Dictionary<string, PoolMetrics>();
 
             foreach (var kvp in pools)
             {
-                var prefab = kvp.Key;
                 var pool = kvp.Value;
 
                 if (pool is IPoolControl poolControl)
                 {
-                    metrics[prefab.name] = poolControl.Metrics;
+                    metrics[pool.PoolId] = poolControl.Metrics;
                 }
             }
 
@@ -713,48 +814,55 @@ namespace PoolMaster
                 return 0;
             }
 
-            var poolsToCull = new List<GameObject>();
+            var poolsToCull = CollectionPool.GetList<GameObject>();
             float currentTime = Time.time;
 
-            foreach (var kvp in pools)
+            try
             {
-                var prefab = kvp.Key;
-                var pool = kvp.Value;
-
-                if (pool is IPoolControl ctrl)
+                foreach (var kvp in pools)
                 {
-                    var metrics = ctrl.Metrics;
+                    var prefab = kvp.Key;
+                    var pool = kvp.Value;
 
-                    // Check if pool has been inactive (no spawns/despawns) for the specified duration
-                    // Use LastActivityTime which tracks spawn, despawn, expansion, and cull operations
-                    float inactiveDuration = currentTime - metrics.LastActivityTime;
-
-                    // Only cull if pool has no active objects and has been inactive long enough
-                    if (pool.ActiveCount == 0 && inactiveDuration >= inactiveDurationSeconds)
+                    if (pool is IPoolControl ctrl)
                     {
-                        poolsToCull.Add(prefab);
+                        var metrics = ctrl.Metrics;
+
+                        // Check if pool has been inactive (no spawns/despawns) for the specified duration
+                        // Use LastActivityTime which tracks spawn, despawn, expansion, and cull operations
+                        float inactiveDuration = currentTime - metrics.LastActivityTime;
+
+                        // Only cull if pool has no active objects and has been inactive long enough
+                        if (pool.ActiveCount == 0 && inactiveDuration >= inactiveDurationSeconds)
+                        {
+                            poolsToCull.Add(prefab);
+                        }
                     }
                 }
-            }
 
-            // Destroy the identified pools
-            int culledCount = 0;
-            foreach (var prefab in poolsToCull)
-            {
-                if (DestroyPool(prefab))
+                // Destroy the identified pools
+                int culledCount = 0;
+                foreach (var prefab in poolsToCull)
                 {
-                    culledCount++;
+                    if (DestroyPool(prefab))
+                    {
+                        culledCount++;
+                    }
                 }
-            }
 
-            if (culledCount > 0)
+                if (culledCount > 0)
+                {
+                    PoolLog.Info(
+                        $"PoolingManager: Culled {culledCount} unused pools (inactive > {inactiveDurationSeconds}s)"
+                    );
+                }
+
+                return culledCount;
+            }
+            finally
             {
-                PoolLog.Info(
-                    $"PoolingManager: Culled {culledCount} unused pools (inactive > {inactiveDurationSeconds}s)"
-                );
+                CollectionPool.Return(poolsToCull);
             }
-
-            return culledCount;
         }
 
         /// <summary>
@@ -799,7 +907,6 @@ namespace PoolMaster
 
             foreach (var kvp in pools)
             {
-                var prefab = kvp.Key;
                 var pool = kvp.Value;
 
                 totalActive += pool.ActiveCount;
@@ -807,7 +914,9 @@ namespace PoolMaster
 
                 if (pool is IPoolControl poolControl)
                 {
-                    poolBreakdown[prefab.name] = poolControl.Metrics;
+                    // Use PoolId instead of prefab.name to avoid key collisions
+                    // when multiple pools reference prefabs with the same name
+                    poolBreakdown[pool.PoolId] = poolControl.Metrics;
                 }
             }
 

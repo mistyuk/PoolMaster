@@ -1,6 +1,6 @@
 {
   "name": "com.poolmaster.core",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "displayName": "PoolMaster",
   "description": "High-performance object pooling system for Unity. Provides zero-allocation pooling, batch operations, thread-safe command buffers, and comprehensive diagnostics.",
   "unity": "2020.3",
@@ -33,12 +33,5 @@
     "type": "git",
     "url": "https://github.com/mistyuk/PoolMaster.git"
   },
-  "dependencies": {},
-  "samples": [
-    {
-      "displayName": "Basic Examples",
-      "description": "Basic pooling examples including batch spawning and component examples",
-      "path": "Examples"
-    }
-  ]
+  "dependencies": {}
 }

@@ -120,6 +120,16 @@ namespace PoolMaster
         void DestroyPool();
 
         /// <summary>
+        /// Flushes and rebuilds the pool. Force-despawns every active instance, destroys
+        /// all inactive instances, and optionally re-prewarms back to the original initial
+        /// size. Use this when the prefab has been edited at runtime — existing pooled
+        /// instances carry stale state and need to be replaced with fresh clones from the
+        /// updated prefab.
+        /// </summary>
+        /// <param name="rePrewarm">If true and the original request had shouldPrewarm=true with initialPoolSize&gt;0, re-prewarm to that size after flushing.</param>
+        void Reseed(bool rePrewarm = true);
+
+        /// <summary>
         /// Checks whether a GameObject belongs to this pool.
         /// </summary>
         /// <param name="instance">The GameObject to check.</param>

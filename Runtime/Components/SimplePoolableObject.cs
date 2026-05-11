@@ -25,6 +25,7 @@ namespace PoolMaster
 
         public override void OnSpawned()
         {
+            base.OnSpawned();
             spawnTime = Time.time;
 
             // Optional: Add some simple behavior
@@ -37,6 +38,7 @@ namespace PoolMaster
         public override void OnDespawned()
         {
             CancelInvoke();
+            base.OnDespawned();
         }
 
         private void ReturnToPool()

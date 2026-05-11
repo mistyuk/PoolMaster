@@ -313,13 +313,16 @@ namespace PoolMaster
 
                 // Mark as no longer spawned from pool BEFORE deactivating
                 // This prevents re-entrancy issues if OnDisable tries to interact with the pool
-                if (instance.TryGetComponent(out PooledMarker marker))
+                if (instance.TryGetComponent(out PooledMarker pooledMarker))
                 {
-                    marker.IsSpawnedFromPool = false;
+                    pooledMarker.IsSpawnedFromPool = false;
                 }
 
-                // Decrement active count
-                activeCount--;
+                // Decrement active count (guard against underflow from external destroys)
+                if (activeCount > 0)
+                    activeCount--;
+                else
+                    PoolLog.Warn($"Pool '{poolId}': Despawn called but activeCount was already 0 — possible double-despawn or external destroy");
 
                 // Deactivate the object (prevents "half-alive" state)
                 instance.SetActive(false);
@@ -466,15 +469,12 @@ namespace PoolMaster
                     continue; // Skip null without throwing
                 }
 
-                // Clean up component cache
-                if (componentCache.ContainsKey(obj))
-                {
-                    componentCache.Remove(obj);
-                }
-
                 // Destroy the GameObject
 #if UNITY_EDITOR
-                UnityEngine.Object.DestroyImmediate(obj);
+                if (Application.isPlaying)
+                    UnityEngine.Object.Destroy(obj);
+                else
+                    UnityEngine.Object.DestroyImmediate(obj);
 #else
                 UnityEngine.Object.Destroy(obj);
 #endif
@@ -526,6 +526,52 @@ namespace PoolMaster
         }
 
         /// <summary>
+        /// Flushes and rebuilds the pool. Force-despawns every active instance found via
+        /// PooledMarker, destroys all inactive instances, and optionally re-prewarms.
+        /// Use after editing the source prefab at runtime — stale clones are replaced
+        /// with fresh ones on the next Spawn().
+        /// </summary>
+        public void Reseed(bool rePrewarm = true)
+        {
+            PoolLog.Info($"Pool '{poolId}': Reseed requested (rePrewarm={rePrewarm})");
+
+            // 1. Force-despawn every active instance by walking PooledMarkers in the scene.
+            //    O(n) over all PooledMarkers — only invoked on explicit user action so
+            //    the allocation/scan cost is acceptable.
+            var allMarkers = UnityEngine.Object.FindObjectsByType<PooledMarker>(FindObjectsSortMode.None);
+            int despawnedActive = 0;
+            for (int i = 0; i < allMarkers.Length; i++)
+            {
+                var marker = allMarkers[i];
+                if (marker != null
+                    && ReferenceEquals(marker.ParentPool, this)
+                    && marker.IsSpawnedFromPool)
+                {
+                    if (Despawn(marker.gameObject))
+                        despawnedActive++;
+                }
+            }
+
+            // 2. Destroy all inactive instances — they hold stale prefab state.
+            int destroyedInactive = inactivePool.Count;
+            Clear();
+
+            // 3. Optionally re-prewarm to the original initial size.
+            int reCreated = 0;
+            if (rePrewarm && request.shouldPrewarm && request.initialPoolSize > 0)
+            {
+                int beforeCount = TotalCount;
+                PrewarmPool(request.initialPoolSize);
+                reCreated = TotalCount - beforeCount;
+            }
+
+            PoolLog.Info(
+                $"Pool '{poolId}': Reseed complete — despawned {despawnedActive} active, " +
+                $"destroyed {destroyedInactive} inactive, re-prewarmed {reCreated}"
+            );
+        }
+
+        /// <summary>
         /// Get diagnostic information about the pool state.
         /// </summary>
         public override string ToString()
@@ -547,7 +593,7 @@ namespace PoolMaster
             if (instance.TryGetComponent(out PooledMarker marker))
             {
                 bool wasActive = marker.IsSpawnedFromPool;
-                if (wasActive)
+                if (wasActive && activeCount > 0)
                 {
                     activeCount--;
                     PoolLog.Debug(
