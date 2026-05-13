@@ -136,7 +136,9 @@ public class Bullet : MonoBehaviour, IPoolable
     public void OnSpawned()
     {
         IsPooled = true;
-        GetComponent<Rigidbody>().velocity = transform.forward * 20f;
+        // Unity 6 renamed Rigidbody.velocity to .linearVelocity. PoolMaster targets
+        // Unity 6.0–6.4 (see package.json) so the new name is required.
+        GetComponent<Rigidbody>().linearVelocity = transform.forward * 20f;
     }
     
     public void OnDespawned()
@@ -146,7 +148,7 @@ public class Bullet : MonoBehaviour, IPoolable
     
     public void PoolReset()
     {
-        GetComponent<Rigidbody>().velocity = Vector3.zero;
+        GetComponent<Rigidbody>().linearVelocity = Vector3.zero;
     }
     
     void OnCollisionEnter(Collision collision)
@@ -181,11 +183,14 @@ PoolingManager.Instance.Despawn(obj);
 // Batch operations — SpawnBatch is an extension method on IPoolControl,
 // not a method on PoolingManager. Get the pool first, then call it.
 var bulletPool = (IPoolControl)PoolingManager.Instance.GetOrCreatePool<Bullet>(request);
-int count = bulletPool.SpawnBatch(positions, rotations, parent);
+Vector3[] positions = { new Vector3(0, 0, 0), new Vector3(1, 0, 0) };
+Quaternion[] rotations = { Quaternion.identity, Quaternion.identity };
+int count = bulletPool.SpawnBatch(positions, rotations, parent: null);
 
-// Get pool by prefab or ID
-IPool pool = PoolingManager.Instance.GetPool(prefab);     // by prefab reference (TryGetPool overload also available)
-IPool pool = PoolingManager.Instance.GetPool("poolId");   // by string ID
+// Look up pool by string ID (the one you set in request.poolId).
+// By-prefab lookup uses TryGetPool(GameObject, out IPool) instead.
+IPool pool = PoolingManager.Instance.GetPool("Bullets");
+PoolingManager.Instance.TryGetPool(prefab, out IPool poolByPrefab);
 
 // Global snapshot
 PoolSnapshot snapshot = PoolingManager.Instance.GetSnapshot();
@@ -309,31 +314,38 @@ CollectionPool.Return(dict);
 ### Extension Methods
 
 ```csharp
-// GameObject extensions
+// GameObject extension — finds the parent pool via PooledMarker and returns the instance.
 gameObject.ReturnToPool();
 
-// Batch spawning
-pool.SpawnBatch(positions, rotations, parent);
-int count = pool.DespawnBatch(objects);
+// Batch spawning is on IPoolControl, not PoolingManager. Cast the pool, then call.
+var ctrl = (IPoolControl)pool;
+ctrl.SpawnBatch(positions, rotations, parent: null);   // arrays of Vector3 and Quaternion
+ctrl.SpawnGrid(center, spacing: 0.5f, gridSize: 8);    // lays out gridSize² instances in a square grid
 ```
 
 ### Events
 
 ```csharp
-// Pool lifecycle
-PoolingEvents.OnPoolCreated += (poolId, prefab) => {};
-PoolingEvents.OnPoolDestroyed += (poolId, prefab) => {};
-PoolingEvents.OnPoolPrewarmed += (poolId, count) => {};
+// Pool lifecycle — all three always available.
+PoolingEvents.OnPoolCreated   += (poolId, prefab) => {};       // Action<string, GameObject>
+PoolingEvents.OnPoolDestroyed += (poolId, prefab) => {};       // Action<string, GameObject>
+PoolingEvents.OnPoolPrewarmed += (poolId, count)  => {};       // Action<string, int>
 
-// Object lifecycle
-PoolingEvents.OnObjectSpawned += (obj, poolId) => {};
+// Object creation — always available.
+PoolingEvents.OnObjectCreated += (obj, poolId) => {};          // Action<GameObject, string>
+
+// Per-spawn / per-despawn events — guarded by the ENABLE_POOL_LOGS compile define
+// to avoid per-call delegate dispatch in release builds. Add ENABLE_POOL_LOGS to
+// your Scripting Define Symbols if you need them.
+#if ENABLE_POOL_LOGS
+PoolingEvents.OnObjectSpawned   += (obj, poolId) => {};
 PoolingEvents.OnObjectDespawned += (obj, poolId) => {};
-PoolingEvents.OnObjectCreated += (obj, poolId) => {};
-PoolingEvents.OnObjectDestroyed += (obj, poolId) => {};
+#endif
 
 // Performance
-PoolingEvents.OnPoolExpanded += (poolId, newCapacity) => {};
-PoolingEvents.OnPoolCulled += (poolId, objectsDestroyed) => {};
+PoolingEvents.OnPoolExpanded += (poolId, oldSize, newSize) => {}; // Action<string, int, int>
+PoolingEvents.OnPoolCulled   += (poolId, objectsCulled)    => {}; // Action<string, int>
+PoolingEvents.OnPoolExhausted += (poolId, maxSize)         => {}; // Action<string, int>
 ```
 
 ## Performance Benchmarks
@@ -366,20 +378,18 @@ Performance comparison vs traditional `Instantiate/Destroy`:
 For thread-safe enqueueing from Jobs or background threads:
 
 ```csharp
-// Get command buffer for a pool
-var buffer = PoolingManager.Instance.GetCommandBuffer("bullets");
+// Get command buffer for a pool (looked up by poolId)
+var buffer = PoolingManager.Instance.GetCommandBuffer("Bullets");
 
-// Enqueue spawn (thread-safe)
-buffer.EnqueueSpawn(position, rotation, parent);
+// Enqueue spawn from a background thread / Job — thread-safe.
+buffer.EnqueueSpawn(position, rotation, parent: null);
 
-// Async spawning
-var gameObject = await buffer.SpawnAsync(position, rotation);
+// Enqueue a batch from a background thread.
+buffer.EnqueueSpawnBatch(positions, rotations, parent: null);
 
-// Batch enqueueing
-buffer.EnqueueSpawnBatch(positions, rotations, parent);
-var objects = await buffer.SpawnBatchAsync(positions, rotations);
-
-// Commands are automatically flushed each frame in LateUpdate
+// Commands are flushed each frame in PoolingManager.LateUpdate on the main thread.
+// All spawning / despawning happens there — your background thread never touches
+// Unity APIs directly.
 ```
 
 ### Pool Metrics & Diagnostics
@@ -419,11 +429,13 @@ request.initializationTiming = PoolInitializationTiming.Lazy;
 // 4. Next frame (avoid loading hitches)
 request.initializationTiming = PoolInitializationTiming.NextFrame;
 
-// 5. On event (custom timing)
+// 5. On event (custom timing) — pools wait until you fire their event.
 request.initializationTiming = PoolInitializationTiming.OnEvent;
 request.eventId = "level_loaded";
-// Then trigger:
-PoolingManager.Instance.BootstrapPools(PoolInitializationTiming.OnEvent, "level_loaded");
+PoolingManager.Instance.AddPreset(request);
+
+// Later, when the event fires:
+PoolingManager.Instance.TriggerBootstrap("level_loaded");
 ```
 
 ### Working with Particles
@@ -445,15 +457,20 @@ public class PooledVfx : PoolableMonoBehaviour
 ```csharp
 if (pool is IPoolControl poolControl)
 {
-    // Advanced operations
-    poolControl.PrewarmPool(count);
-    poolControl.Clear();
-    poolControl.CullExcess(maxCount);
-    poolControl.DestroyPool();
-    
-    // Batch operations
-    poolControl.SpawnBatch(positions, rotations, parent);
-    poolControl.DespawnBatch(objects);
+    // Lifecycle / capacity management
+    poolControl.PrewarmPool(count);                 // create N inactive instances
+    poolControl.Clear();                            // destroy all inactive (keeps active)
+    poolControl.ShrinkInactive(targetInactive: 4);  // trim cached inactive down to N
+    poolControl.Reseed(rePrewarm: true);            // force-flush + rebuild (added v1.0.2)
+    poolControl.DestroyPool();                      // destroy everything; pool is then invalid
+
+    // Batch spawn — extension methods on IPoolControl
+    poolControl.SpawnBatch(positions, rotations, parent: null);
+    poolControl.SpawnGrid(center, spacing: 0.5f, gridSize: 8);
+
+    // Diagnostics
+    PoolMetrics m = poolControl.Metrics;
+    int total = poolControl.TotalCount;
 }
 ```
 

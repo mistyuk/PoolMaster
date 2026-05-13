@@ -5,6 +5,62 @@ All notable changes to PoolMaster will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.5] - 2026-05-11
+
+End-to-end audit pass. A multi-agent deep audit uncovered three more "silently
+ignored input" bugs of the same shape as the ones fixed in 1.0.3 and 1.0.4, plus
+a cluster of doc-versus-reality drift in the README.
+
+### Fixed
+- **`Pool<T>` was silently ignoring `PoolRequest.initializationTiming`**. The
+  constructor always prewarmed inline whenever `shouldPrewarm && initialPoolSize > 0`,
+  regardless of `Lazy` / `NextFrame` / `OnAwake` / `OnStart` / `OnEvent`. `GameObjectPool`
+  honored these correctly. Pool&lt;T&gt; now matches: `Lazy` skips prewarm, `NextFrame`
+  defers via coroutine on the PoolingManager singleton (or falls back to immediate if
+  the manager isn't available), and the other modes prewarm at construction.
+- **`GameObjectPool.Despawn` was skipping `IPoolable.PoolReset()`**. Pool&lt;T&gt;
+  invokes PoolReset after deactivating; GameObjectPool only called `OnDespawned`.
+  For an IPoolable prefab pooled via the non-generic path (which `PoolingManager.Spawn`
+  routes to when the prefab has no IPoolable on the root, or callers via
+  `GetOrCreateGameObjectPool`), this silently skipped the configurable base-class
+  cleanup — `PoolableMonoBehaviour.resetTransformOnDespawn`,
+  `sleepRigidbodiesOnDespawn`, custom `PoolReset` overrides — for every despawn.
+- **`PooledVfx.PlayForDuration` was permanently mutating `[SerializeField]` fields**.
+  The method overwrote `maxLifetime`, `useMaxLifetime`, and `autoReturnWhenFinished`
+  on the live instance, which the pool reuses. Subsequent spawns from the same pool
+  inherited the duration from the previous call. Now uses transient runtime fields
+  (`_hasDurationOverride`, `_overrideMaxLifetime`) that reset on `OnDespawned`.
+
+### Documentation
+- **README API reference cleaned up** — multiple incorrect signatures that would
+  compile-fail on copy-paste:
+  - `pool.DespawnBatch(objects)` — method doesn't exist; removed.
+  - `buffer.SpawnAsync(...)` / `SpawnBatchAsync(...)` — methods don't exist; replaced
+    with the correct `EnqueueSpawn` / `EnqueueSpawnBatch` pattern.
+  - `PoolingManager.BootstrapPools(...)` — method is private; corrected to
+    `AddPreset(request)` + `TriggerBootstrap(eventId)`.
+  - `poolControl.CullExcess(maxCount)` — method doesn't exist; corrected to
+    `ShrinkInactive(targetInactive)`.
+  - `PoolingManager.GetPool(prefab)` — `GetPool` takes a string only; clarified and
+    pointed to `TryGetPool(GameObject, out IPool)` for prefab lookup.
+  - `PoolingEvents.OnPoolExpanded` — documented arity was 2, real signature is
+    `Action<string, int, int>` (poolId, oldSize, newSize); corrected.
+  - `PoolingEvents.OnObjectDestroyed` — event doesn't exist; removed.
+  - `PoolingEvents.OnObjectSpawned` / `OnObjectDespawned` — only defined when
+    `ENABLE_POOL_LOGS` is in scripting defines; documented the compile guard.
+  - `Rigidbody.velocity` in the IPoolable Bullet example — Unity 6 renamed to
+    `linearVelocity`; updated to match the package's stated Unity 6 support.
+
+### Tests
+- New `Tests/PoolBehaviorTests.cs` covering the bug paths from 1.0.2 – 1.0.5:
+  request poolId / poolGuid precedence, `usePoolContainer` parenting, GameObjectPool
+  cull-on-overflow vs. keep-when-disabled, GameObjectPool with non-IPoolable prefabs,
+  `GameObjectPool.Despawn` calling `PoolReset`. Existing test count was zero on the
+  actual Pool&lt;T&gt; / GameObjectPool surfaces, which is how 1.0.2 – 1.0.4 shipped
+  with regressions.
+
+---
+
 ## [1.0.4] - 2026-05-11
 
 ### Fixed

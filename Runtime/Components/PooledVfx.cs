@@ -47,6 +47,12 @@ namespace PoolMaster
         private float nextCheckTime;
         private bool isPlaying;
 
+        // Transient overrides set by PlayForDuration so we don't permanently mutate the
+        // [SerializeField] defaults. When _hasDurationOverride is true, the Update loop
+        // uses _overrideMaxLifetime instead of maxLifetime / useMaxLifetime / autoReturnWhenFinished.
+        private bool _hasDurationOverride;
+        private float _overrideMaxLifetime;
+
         #endregion
 
         #region Pooling Lifecycle
@@ -77,6 +83,9 @@ namespace PoolMaster
             base.OnDespawned();
 
             isPlaying = false;
+            // Clear any transient duration override so the next spawn from this pool
+            // sees the original [SerializeField] settings again.
+            _hasDurationOverride = false;
         }
 
         public override void PoolReset()
@@ -96,6 +105,17 @@ namespace PoolMaster
 
         private void Update()
         {
+            // Transient override path: PlayForDuration was called this spawn. Single
+            // exit condition (elapsed >= override) and we ignore the serialized flags.
+            if (_hasDurationOverride)
+            {
+                if (Time.time - spawnTime >= _overrideMaxLifetime)
+                {
+                    OnMaxLifetimeReached();
+                }
+                return;
+            }
+
             if (!autoReturnWhenFinished && !useMaxLifetime)
                 return;
 
@@ -247,17 +267,22 @@ namespace PoolMaster
         }
 
         /// <summary>
-        /// Set the VFX to play for a specific duration, then return to pool.
+        /// Play the VFX, force-returning to the pool after the given duration regardless
+        /// of the inspector-configured auto-return settings. The override is transient —
+        /// it only applies to this spawn and resets on OnDespawned, so subsequent spawns
+        /// from the same pool see the original serialized values.
         /// </summary>
-        /// <param name="duration">Duration in seconds</param>
+        /// <param name="duration">Duration in seconds before forcing return to pool.</param>
         public void PlayForDuration(float duration)
         {
             PlayVfx();
 
-            // Override auto-return settings for this specific play
-            maxLifetime = duration;
-            useMaxLifetime = true;
-            autoReturnWhenFinished = false;
+            // Transient runtime override — does NOT mutate [SerializeField] fields.
+            // Previously this method overwrote maxLifetime / useMaxLifetime /
+            // autoReturnWhenFinished on the prefab instance, permanently changing
+            // behavior for every future spawn that reused the same pooled GameObject.
+            _hasDurationOverride = true;
+            _overrideMaxLifetime = duration;
         }
 
         /// <summary>

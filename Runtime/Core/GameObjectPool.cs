@@ -163,12 +163,10 @@ namespace PoolMaster
             }
 
             // Call poolable hooks if present
+            IPoolable cachedPoolable = marker.CachedPoolableComponent as IPoolable;
             try
             {
-                if (marker.CachedPoolableComponent is IPoolable poolable)
-                {
-                    poolable.OnDespawned();
-                }
+                cachedPoolable?.OnDespawned();
             }
             catch (Exception e)
             {
@@ -180,6 +178,20 @@ namespace PoolMaster
             // Deactivate and reparent
             instance.SetActive(false);
             instance.transform.SetParent(poolParent);
+
+            // Mirror Pool<T>.Despawn: after deactivation, call PoolReset() so configurable
+            // base-class behavior (resetTransformOnDespawn, sleepRigidbodiesOnDespawn) runs
+            // for pooled IPoolable components that happen to be pooled via this non-generic
+            // path. Previously these settings were silently ignored when going through
+            // GameObjectPool, diverging from the Pool<T> contract.
+            try
+            {
+                cachedPoolable?.PoolReset();
+            }
+            catch (Exception e)
+            {
+                PoolLog.Warn($"Pool '{poolId}': Exception during PoolReset for '{instance.name}': {e.Message}");
+            }
 
             activeCount = Mathf.Max(0, activeCount - 1);
             metricsTracker.RecordDespawn();

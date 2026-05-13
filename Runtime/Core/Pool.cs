@@ -135,11 +135,38 @@ namespace PoolMaster
                 $"Created pool '{this.poolId}' for prefab '{prefab.name}' with request: {request}"
             );
 
-            // Pre-warm pool if requested
+            // Pre-warm pool if requested. Previously this prewarmed unconditionally and
+            // ignored request.initializationTiming, which silently broke Lazy/NextFrame
+            // configurations (instances allocated at ctor time even for Lazy pools).
+            // GameObjectPool already honored the timing modes; Pool<T> now matches.
             if (request.shouldPrewarm && request.initialPoolSize > 0)
             {
-                PrewarmPool(request.initialPoolSize);
+                switch (request.initializationTiming)
+                {
+                    case PoolInitializationTiming.Lazy:
+                        // Lazy: do nothing now; SpawnInternal expands on demand.
+                        break;
+                    case PoolInitializationTiming.NextFrame:
+                        if (PoolingManager.Instance != null)
+                            PoolingManager.Instance.StartCoroutine(PrewarmNextFrame(request.initialPoolSize));
+                        else
+                            PrewarmPool(request.initialPoolSize);
+                        break;
+                    case PoolInitializationTiming.Immediate:
+                    case PoolInitializationTiming.OnAwake:
+                    case PoolInitializationTiming.OnStart:
+                    case PoolInitializationTiming.OnEvent:
+                    default:
+                        PrewarmPool(request.initialPoolSize);
+                        break;
+                }
             }
+        }
+
+        private System.Collections.IEnumerator PrewarmNextFrame(int count)
+        {
+            yield return null;
+            PrewarmPool(count);
         }
 
         /// <summary>
