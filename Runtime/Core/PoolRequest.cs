@@ -100,7 +100,16 @@ namespace PoolMaster
         [Tooltip("Name for the pool container GameObject (if usePoolContainer is true).")]
         public string containerName;
 
-        [Tooltip("Enable debug logging for this pool (useful for development).")]
+        [Tooltip(
+            "Currently inactive. PoolLog uses the compile-time ENABLE_POOL_LOGS define " +
+            "for performance, so this per-pool flag is not consulted at runtime. May be " +
+            "wired up to gate logging in a future release."
+        )]
+        [System.Obsolete(
+            "enableDebugLogging is currently a no-op: PoolLog uses the compile-time " +
+            "ENABLE_POOL_LOGS define rather than this per-pool flag. The field is kept " +
+            "for serialization compatibility and may be wired up in a future release.",
+            error: false)]
         public bool enableDebugLogging;
 
         [Tooltip(
@@ -136,6 +145,7 @@ namespace PoolMaster
                 initialSize = 0;
             }
 
+#pragma warning disable CS0618 // enableDebugLogging is obsolete; factory still sets the default for back-compat
             return new PoolRequest
             {
                 prefab = prefab,
@@ -151,6 +161,7 @@ namespace PoolMaster
                 enableDebugLogging = false,
                 category = "Default",
             };
+#pragma warning restore CS0618
         }
 
         /// <summary>
@@ -183,7 +194,9 @@ namespace PoolMaster
             request.allowDynamicExpansion = true;
             request.cullExcessObjects = true;
             request.category = category;
-            request.enableDebugLogging = false; // Disable for performance
+#pragma warning disable CS0618
+            request.enableDebugLogging = false; // Currently a no-op; kept for back-compat
+#pragma warning restore CS0618
             return request;
         }
 

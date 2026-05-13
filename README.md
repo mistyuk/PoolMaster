@@ -178,20 +178,17 @@ GameObject obj = PoolingManager.Instance.Spawn(prefab); // At origin
 // Despawn objects
 PoolingManager.Instance.Despawn(obj);
 
-// Batch operations
-int count = PoolingManager.Instance.SpawnBatch(
-    prefab, 
-    positions, 
-    rotations, 
-    parent
-);
+// Batch operations — SpawnBatch is an extension method on IPoolControl,
+// not a method on PoolingManager. Get the pool first, then call it.
+var bulletPool = (IPoolControl)PoolingManager.Instance.GetOrCreatePool<Bullet>(request);
+int count = bulletPool.SpawnBatch(positions, rotations, parent);
 
 // Get pool by prefab or ID
-IPool pool = PoolingManager.Instance.GetPool(prefab);
-IPool pool = PoolingManager.Instance.GetPool("poolId");
+IPool pool = PoolingManager.Instance.GetPool(prefab);     // by prefab reference (TryGetPool overload also available)
+IPool pool = PoolingManager.Instance.GetPool("poolId");   // by string ID
 
 // Global snapshot
-PoolSnapshot snapshot = PoolingManager.Instance.CaptureSnapshot();
+PoolSnapshot snapshot = PoolingManager.Instance.GetSnapshot();
 ```
 
 #### Pool<T>
@@ -227,15 +224,16 @@ Configuration for pool creation.
 var request = new PoolRequest
 {
     prefab = bulletPrefab,
-    initialPoolSize = 50,              // Initial capacity
-    shouldPrewarm = true,              // Create objects immediately
-    maxPoolSize = 200,                 // Max objects to keep pooled
-    allowExpansion = true,             // Grow beyond initial size
-    cullExcessObjects = true,          // Remove excess objects
-    cullThreshold = 100,               // Cull when over this count
+    poolId = "Bullets",                 // Optional ID for GetPool("Bullets") lookup
+    initialPoolSize = 50,               // Pre-instantiated count at startup
+    shouldPrewarm = true,               // Create initialPoolSize objects immediately
+    maxPoolSize = 200,                  // Max instances kept around
+    allowDynamicExpansion = true,       // Grow past maxPoolSize when exhausted
+    cullExcessObjects = true,           // Destroy excess instances when inactive cache > maxPoolSize
     initializationTiming = PoolInitializationTiming.OnAwake,
-    usePoolContainer = true,           // Parent container
-    containerName = "Bullet Pool"
+    usePoolContainer = true,            // Group spawned instances under a named child of PoolingManager
+    containerName = "Bullet Pool",
+    category = "Combat"                 // Optional tag for grouping in diagnostics
 };
 ```
 

@@ -83,7 +83,17 @@ namespace PoolMaster
         {
             this.prefab = prefab ?? throw new ArgumentNullException(nameof(prefab));
             this.request = request;
-            this.poolId = poolId ?? $"{prefab.name}_Pool_{GetHashCode()}";
+            // Pool ID precedence: explicit poolGuid (cross-scene determinism) wins,
+            // then the ctor-arg poolId, then the request's poolId, finally a
+            // hash-based fallback. Without this chain, PoolingManager.GetOrCreatePool<T>
+            // ignored both request.poolId and request.poolGuid because it doesn't pass
+            // a ctor poolId argument — so users setting either field would find that
+            // PoolingManager.GetPool(yourId) returned null.
+            this.poolId =
+                !string.IsNullOrEmpty(request.poolGuid) ? request.poolGuid
+                : !string.IsNullOrEmpty(poolId) ? poolId
+                : !string.IsNullOrEmpty(request.poolId) ? request.poolId
+                : $"{prefab.name}_Pool_{GetHashCode()}";
 
             // Create a named container whenever usePoolContainer is true. If a
             // poolParent was passed in (e.g. PoolingManager.transform), the new

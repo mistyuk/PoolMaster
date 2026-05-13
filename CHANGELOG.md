@@ -5,6 +5,34 @@ All notable changes to PoolMaster will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.4] - 2026-05-11
+
+### Fixed
+- **`Pool<T>` was silently ignoring `PoolRequest.poolId` and `PoolRequest.poolGuid`**.
+  The constructor's poolId resolution was `poolId ?? hash` — only honouring its own
+  ctor argument and falling through to an auto-generated hash. `PoolingManager.GetOrCreatePool<T>`
+  doesn't pass a ctor poolId, so `request.poolId = "Bullets"` would never reach the
+  pool. Subsequent `PoolingManager.GetPool("Bullets")` returned null even though the
+  pool clearly existed. Now matches `GameObjectPool`'s precedence chain:
+  `request.poolGuid > ctor poolId > request.poolId > auto-hash`.
+- **README API reference had several incorrect signatures** that would compile-fail
+  on copy-paste:
+  - `PoolingManager.Instance.SpawnBatch(...)` doesn't exist — corrected to show
+    `SpawnBatch` as the IPoolControl extension method it actually is.
+  - `PoolingManager.Instance.CaptureSnapshot()` doesn't exist — corrected to
+    `GetSnapshot()`.
+  - `PoolRequest.allowExpansion` doesn't exist — corrected to `allowDynamicExpansion`.
+  - `PoolRequest.cullThreshold` doesn't exist — removed; behavior is controlled by
+    `maxPoolSize` + `cullExcessObjects` together.
+
+### Deprecated
+- **`PoolRequest.enableDebugLogging`** marked `[Obsolete]`. The field is currently
+  a no-op — `PoolLog` uses the compile-time `ENABLE_POOL_LOGS` define, not this
+  per-pool flag. Kept for serialization back-compat; may be wired up to gate
+  runtime logging in a future release.
+
+---
+
 ## [1.0.3] - 2026-05-11
 
 ### Fixed

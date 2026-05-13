@@ -83,7 +83,9 @@ namespace PoolMaster.Tests
             Assert.AreEqual(PoolInitializationTiming.OnAwake, request.initializationTiming);
             Assert.IsTrue(request.allowDynamicExpansion);
             Assert.IsTrue(request.cullExcessObjects);
-            Assert.IsFalse(request.enableDebugLogging); // Performance = no debug logs
+#pragma warning disable CS0618
+            Assert.IsFalse(request.enableDebugLogging); // Currently a no-op but factory still defaults to false
+#pragma warning restore CS0618
         }
 
         [Test]
