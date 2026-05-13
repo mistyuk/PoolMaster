@@ -5,6 +5,21 @@ All notable changes to PoolMaster will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.3] - 2026-05-11
+
+### Fixed
+- **`PoolRequest.usePoolContainer` / `containerName` were silently ignored** when
+  a pool was created through `PoolingManager.GetOrCreatePool<T>` /
+  `GetOrCreateGameObjectPool`. The container-creation branch in `Pool<T>` and
+  `GameObjectPool` only ran when `poolParent == null`, but `PoolingManager`
+  always passed its own `transform` as `poolParent`. Pooled instances landed
+  directly under the `PoolingManager` GameObject instead of under a named
+  child container. Container is now always created when `usePoolContainer`
+  is true and parented under `poolParent` (or scene root if none). Resulting
+  hierarchy: `PoolingManager → [containerName] → pooled instances`.
+
+---
+
 ## [1.0.2] - 2026-05-11
 
 ### Stability & Unity 6 compatibility

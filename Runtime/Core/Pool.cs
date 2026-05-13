@@ -85,13 +85,23 @@ namespace PoolMaster
             this.request = request;
             this.poolId = poolId ?? $"{prefab.name}_Pool_{GetHashCode()}";
 
-            // Create container if requested and no parent provided
-            if (request.usePoolContainer && poolParent == null)
+            // Create a named container whenever usePoolContainer is true. If a
+            // poolParent was passed in (e.g. PoolingManager.transform), the new
+            // container is parented under it so the hierarchy reads as
+            // "PoolingManager → [containerName] → pooled instances". When poolParent
+            // is null the container sits at scene root.
+            //
+            // Previously this only ran when poolParent was null, which made
+            // usePoolContainer / containerName silently no-op for any pool created
+            // through PoolingManager (the typical entry point).
+            if (request.usePoolContainer)
             {
                 var containerName = string.IsNullOrEmpty(request.containerName)
                     ? $"{prefab.name}_Pool"
                     : request.containerName;
                 var container = new GameObject(containerName);
+                if (poolParent != null)
+                    container.transform.SetParent(poolParent, worldPositionStays: false);
                 this.poolParent = container.transform;
             }
             else

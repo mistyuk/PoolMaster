@@ -1,6 +1,6 @@
 {
   "name": "com.poolmaster.core",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "displayName": "PoolMaster",
   "description": "High-performance object pooling system for Unity. Provides zero-allocation pooling, batch operations, thread-safe command buffers, and comprehensive diagnostics.",
   "unity": "2020.3",
